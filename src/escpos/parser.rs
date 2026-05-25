@@ -37,7 +37,7 @@ impl EscPosParser {
                             commands.push(cmd);
                             i += consumed;
                         }
-                        Ok(None) => break, // Incomplete, wait for more
+                        Ok(Option::None) => break, // Incomplete, wait for more
                         Err(_) => { i += 2; } // Skip bad ESC sequence
                     }
                 }
@@ -51,7 +51,7 @@ impl EscPosParser {
                             commands.push(cmd);
                             i += consumed;
                         }
-                        Ok(None) => break,
+                        Ok(Option::None) => break,
                         Err(_) => { i += 2; }
                     }
                 }
@@ -67,7 +67,7 @@ impl EscPosParser {
                         i += 1;
                     }
                     if i > text_start {
-                        let text = String::from_utf8_lossy(&self.buffer[text_start..i]).to_string();
+                        let text = self.decode_text(&self.buffer[text_start..i]);
                         if !text.is_empty() {
                             commands.push(EscPosCommand::Text(text));
                         }
@@ -148,6 +148,18 @@ impl EscPosParser {
                 if data.len() < 3 { return Ok(None); }
                 Ok(Some((EscPosCommand::SetCodepage(data[2]), 3)))
             }
+            
+            // Generate pulse (ESC p m t1 t2)
+            b'p' => {
+                if data.len() < 5 { return Ok(None); }
+                Ok(Some((EscPosCommand::GeneratePulse { pin: data[2], t1: data[3], t2: data[4] }, 5)))
+            }
+            
+            // Print and feed n lines (ESC d n)
+            b'd' => {
+                if data.len() < 3 { return Ok(None); }
+                Ok(Some((EscPosCommand::PrintAndFeed(data[2]), 3)))
+            }
 
             // Cut paper
             b'm' | b'i' => Ok(Some((EscPosCommand::CutPaper, 2))),
@@ -222,10 +234,69 @@ impl EscPosParser {
                 }
             }
 
+            // GS H — Select HRI position
+            b'H' => {
+                if data.len() < 3 { return Ok(None); }
+                Ok(Some((EscPosCommand::SetHriPosition(data[2]), 3)))
+            }
+
+            // GS f — Select HRI font
+            b'f' => {
+                if data.len() < 3 { return Ok(None); }
+                Ok(Some((EscPosCommand::SetHriFont(data[2]), 3)))
+            }
+
+            // GS w — Set barcode width
+            b'w' => {
+                if data.len() < 3 { return Ok(None); }
+                Ok(Some((EscPosCommand::SetBarcodeWidth(data[2]), 3)))
+            }
+
+            // GS h — Set barcode height
+            b'h' => {
+                if data.len() < 3 { return Ok(None); }
+                Ok(Some((EscPosCommand::SetBarcodeHeight(data[2]), 3)))
+            }
+
+            // GS k — Print barcode
+            b'k' => {
+                if data.len() < 3 { return Ok(None); }
+                let m = data[2];
+                if m <= 6 {
+                    // Format 1: GS k m d1...dk NUL
+                    let mut k = 0;
+                    while 3 + k < data.len() && data[3 + k] != 0 {
+                        k += 1;
+                    }
+                    if 3 + k >= data.len() {
+                        return Ok(None); // Incomplete
+                    }
+                    let barcode_data = self.decode_text(&data[3..3 + k]);
+                    Ok(Some((EscPosCommand::PrintBarcode { system: m, data: barcode_data }, 3 + k + 1)))
+                } else if (65..=73).contains(&m) {
+                    // Format 2: GS k m n d1...dn
+                    if data.len() < 4 { return Ok(None); }
+                    let n = data[3] as usize;
+                    if data.len() < 4 + n { return Ok(None); }
+                    let barcode_data = self.decode_text(&data[4..4 + n]);
+                    Ok(Some((EscPosCommand::PrintBarcode { system: m, data: barcode_data }, 4 + n)))
+                } else {
+                    Ok(Some((EscPosCommand::Unknown(data[..2].to_vec()), 2)))
+                }
+            }
+
             _ => {
                 Ok(Some((EscPosCommand::Unknown(data[..2].to_vec()), 2)))
             }
         }
+    }
+
+    /// Decode text according to current codepage (simplified to CP437 for now)
+    fn decode_text(&self, data: &[u8]) -> String {
+        // For now, we use UTF-8 lossy as a base, 
+        // but we can add full CP437 mapping here if needed.
+        // ESC/POS usually defaults to CP437.
+        String::from_utf8_lossy(data).to_string()
     }
 }
 

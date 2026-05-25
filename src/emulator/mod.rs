@@ -77,8 +77,7 @@ impl EmulatorState {
 
     pub fn set_paper_width(&mut self, width_mm: u32) {
         let paper_width = match width_mm {
-            50 => PaperWidth::Width50mm,
-            78 => PaperWidth::Width78mm,
+            50 | 58 => PaperWidth::Width58mm,
             80 => PaperWidth::Width80mm,
             _ => PaperWidth::Width80mm,
         };

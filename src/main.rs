@@ -31,7 +31,7 @@ async fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions::default();
 
     eframe::run_native(
-        "ESC/POS Virtual Printer Emulator",
+        "ESC/POS Virtual Printer",
         options,
         Box::new(|_cc| Box::new(EscPosEmulatorApp::new(emulator_state))),
     )

@@ -4,17 +4,15 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum PaperWidth {
-    Width50mm,  // 384 dots (48 chars normal font)
-    Width78mm,  // 576 dots (72 chars normal font)
-    Width80mm,  // 640 dots (80 chars normal font)
+    Width58mm,  // 384 dots (Standard 58mm roll)
+    Width80mm,  // 576 dots (Standard 80mm roll)
 }
 
 impl PaperWidth {
     pub fn get_width_dots(&self) -> u32 {
         match self {
-            PaperWidth::Width50mm => 384,
-            PaperWidth::Width78mm => 576,
-            PaperWidth::Width80mm => 640,
+            PaperWidth::Width58mm => 384,
+            PaperWidth::Width80mm => 576,
         }
     }
 
@@ -35,6 +33,7 @@ pub enum ReceiptLine {
     Text(String),
     /// Monochrome bitmap: width in pixels, height in pixels, 1-bit-per-pixel packed data
     Bitmap { width_px: u32, height_px: u32, data: Vec<u8> },
+    Barcode { system: u8, data: String },
     Separator,
 }
 
@@ -56,7 +55,7 @@ pub struct PrinterState {
 impl PrinterState {
     pub fn new() -> Self {
         Self {
-            paper_width: PaperWidth::Width80mm,
+            paper_width: PaperWidth::Width58mm,
             current_font: Font::FontA,
             justification: Justification::Left,
             emphasis: false,
@@ -107,6 +106,12 @@ impl PrinterState {
                 self.buffer.push(ReceiptLine::Bitmap {
                     width_px,
                     height_px,
+                    data: data.clone(),
+                });
+            }
+            EscPosCommand::PrintBarcode { system, data } => {
+                self.buffer.push(ReceiptLine::Barcode {
+                    system: *system,
                     data: data.clone(),
                 });
             }
@@ -208,6 +213,7 @@ impl PrinterState {
             match line {
                 ReceiptLine::Text(_) => h += self.line_height,
                 ReceiptLine::Bitmap { height_px, .. } => h += height_px,
+                ReceiptLine::Barcode { .. } => h += 80, // Default barcode height
                 ReceiptLine::Separator => h += self.line_height,
             }
         }
